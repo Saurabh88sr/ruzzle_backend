@@ -5,7 +5,12 @@ const cors = require("cors");
 
 const app = express();
 // live and local origins
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:4000/",
+    "https://ruzzleboard.vercel.app/"
+  ]
+}));
 
 app.get("/", (req, res) => {
   res.send("Ruzzle Backend is running");
