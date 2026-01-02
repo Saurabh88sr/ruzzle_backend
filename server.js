@@ -17,10 +17,7 @@ app.get("/", (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: [
-      "https://ruzzleboard.vercel.app",
-      "http://localhost:4000"
-    ]},
+  cors: { origin: "*" },
 });
 
 const players = {};
