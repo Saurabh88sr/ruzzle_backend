@@ -5,10 +5,7 @@ const cors = require("cors");
 
 const app = express();
 // live and local origins
-app.use(cors({ origin: [
-      "https://ruzzleboard.vercel.app",
-      "http://localhost:4000"
-    ]}));
+app.use(cors());
 
     // const PORT = process.env.PORT || 5000;
 
