@@ -9,9 +9,6 @@ const app = express();
 // live and local origins
 app.use(cors());
 
-    // const PORT = process.env.PORT || 5000;
-
-
 app.get("/", (req, res) => {
   res.send("Ruzzle Backend is running");
 });
@@ -20,8 +17,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      "http://localhost:4000",
-      "https://ruzzleboard.vercel.app"
+      "http://localhost:4000/",
+      "https://ruzzleboard.vercel.app/"
     ]
   }
 });
@@ -259,6 +256,7 @@ io.on("connection", (socket) => {
     });
   });
 });
+
 
 const PORT = process.env.PORT || 5000;
 
