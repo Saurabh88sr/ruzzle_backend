@@ -21,15 +21,20 @@ app.get("/", (req, res) => {
 });
 
 const server = http.createServer(app);
+
+/* 🔥 SOCKET.IO CORS (THIS IS CRITICAL) */
 const io = new Server(server, {
   cors: {
     origin: [
       "http://localhost:4000",
       "https://ruzzleboard.vercel.app"
     ],
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ["polling", "websocket"] // important for Render
 });
+
 
 
 const players = {};
