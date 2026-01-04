@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
 
 const server = http.createServer(app);
 
-/* 🔥 SOCKET.IO CORS (THIS IS CRITICAL) */
+
 const io = new Server(server, {
   cors: {
     origin: [
