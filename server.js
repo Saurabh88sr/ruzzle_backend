@@ -4,17 +4,19 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 
 const app = express();
-// live and local origins
+
+/* ===============================
+   EXPRESS CORS (REST APIs)
+================================ */
 app.use(
   cors({
     origin: [
-      "http://localhost:4000",
-      "https://ruzzleboard.vercel.app"
+  "http://localhost:5173/"
     ],
-    methods: ["GET", "POST"],
-    credentials: true
+ 
   })
 );
+
 
 app.get("/", (req, res) => {
   res.send("Ruzzle Backend is running");
@@ -22,29 +24,44 @@ app.get("/", (req, res) => {
 
 const server = http.createServer(app);
 
-
+/* ===============================
+   SOCKET.IO CORS (CRITICAL FIX)
+================================ */
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:4000",
-      "https://ruzzleboard.vercel.app"
-    ],
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+       " http://localhost:5173"
+      ];
+
+      // allow requests with no origin (like mobile apps / polling)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
     methods: ["GET", "POST"],
-    credentials: true
+  
   },
-  transports: ["polling", "websocket"] // important for Render
+  transports: ["polling", "websocket"],
 });
 
 
-
+/* ===============================
+   GAME STATE
+================================ */
 const players = {};
 const rooms = {};
 const scores_detial_list = {};
 
+/* ===============================
+   SOCKET EVENTS
+================================ */
 io.on("connection", (socket) => {
   console.log("Player Connected:", socket.id);
 
-  // JOIN
+  /* ---------- JOIN ---------- */
   socket.on("join", (playerData) => {
     const player = {
       socketId: socket.id,
@@ -56,26 +73,22 @@ io.on("connection", (socket) => {
 
     players[socket.id] = player;
 
-    // ✅ Send self profile ONLY to this socket
     socket.emit("my_profile", player);
 
-    // 🔔 Notify others about new player
     socket.broadcast.emit("join_player", player);
 
-    // ✅ Send online players list WITHOUT self
     const onlineWithoutSelf = Object.values(players).filter(
       (p) => p.socketId !== socket.id
     );
 
-    socket.emit("online_players", onlineWithoutSelf); // for self
-    socket.broadcast.emit("online_players", Object.values(players)); // for others
+    socket.emit("online_players", onlineWithoutSelf);
+    socket.broadcast.emit("online_players", Object.values(players));
   });
 
-  // SEND GAME REQUEST
+  /* ---------- CREATE ROOM ---------- */
   socket.on("create_room", ({ targetSocketId }) => {
     const fromPlayer = players[socket.id];
     const toPlayer = players[targetSocketId];
-    console.log("Create room request from", socket.id, "to", targetSocketId);
 
     if (!fromPlayer || !toPlayer) return;
 
@@ -84,100 +97,86 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (fromPlayer.currentRoom) {
-      socket.emit("error_msg", "You are already in a room");
-      return;
-    }
-
-    if (toPlayer.currentRoom) {
-      socket.emit("error_msg", "Player is already in a room");
+    if (fromPlayer.currentRoom || toPlayer.currentRoom) {
+      socket.emit("error_msg", "One of the players is already in a room");
       return;
     }
 
     io.to(targetSocketId).emit("game_request", {
       from: socket.id,
-      name: players[socket.id]?.name || "Unknown",
+      name: fromPlayer.name,
     });
-    console.log(`Game request sent from ${socket.id} to ${targetSocketId}`);
   });
 
-  // ACCEPT GAME REQUEST
+  /* ---------- ACCEPT REQUEST ---------- */
   socket.on("accept_request", ({ from }) => {
     const accepter = players[socket.id];
     const requester = players[from];
 
     if (!accepter || !requester) return;
 
-    // ❌ validation again (VERY IMPORTANT)
     if (accepter.currentRoom || requester.currentRoom) {
       socket.emit("error_msg", "Room already joined");
       return;
     }
-    const roomId = `room_${socket.id}_${from}`;
+
+    const roomId = `room_${from}_${socket.id}`;
 
     rooms[roomId] = {
-      players: [socket.id, from],
+      players: [from, socket.id],
       turn: from,
       serialNo: 0,
       board: Array(81).fill(null),
       scores: {
-        [socket.id]: 0,
         [from]: 0,
+        [socket.id]: 0,
       },
     };
 
     accepter.currentRoom = roomId;
     requester.currentRoom = roomId;
+
     socket.join(roomId);
-    io.to(from).socketsJoin(roomId);
+    io.sockets.sockets.get(from)?.join(roomId);
 
     io.to(roomId).emit("game_start", {
       roomId,
       game: rooms[roomId],
     });
-
-    console.log("Game started:", roomId);
   });
 
+  /* ---------- LEAVE ROOM ---------- */
   socket.on("leave_room", () => {
     const player = players[socket.id];
-    if (!player || !player.currentRoom) return;
+    if (!player?.currentRoom) return;
 
     const roomId = player.currentRoom;
     const room = rooms[roomId];
 
     if (room) {
-      // notify other player
       socket.to(roomId).emit("player_left", {
         socketId: socket.id,
         name: player.name,
       });
 
-      // cleanup
       room.players.forEach((pid) => {
-        if (players[pid]) {
-          players[pid].currentRoom = null;
-        }
+        if (players[pid]) players[pid].currentRoom = null;
       });
 
       delete rooms[roomId];
+      delete scores_detial_list[roomId];
     }
 
     socket.leave(roomId);
     player.currentRoom = null;
-
-    console.log("Player left room:", roomId);
   });
 
-  // MAKE MOVE
+  /* ---------- MAKE MOVE ---------- */
   socket.on("make_move", ({ roomId, index, value }) => {
     const game = rooms[roomId];
     if (!game) return;
 
-    // validate turn
     if (game.turn !== socket.id) return;
-
-    // prevent overwrite
     if (game.board[index]) return;
 
     game.serialNo++;
@@ -187,41 +186,33 @@ io.on("connection", (socket) => {
       index,
       value,
       playerId: socket.id,
-      playerName: players[socket.id]?.name || "Unknown",
+      playerName: players[socket.id]?.name,
       playerNo: game.players[0] === socket.id ? 1 : 2,
     };
 
-    // switch turn
     game.turn = game.players.find((p) => p !== socket.id);
 
-    // broadcast update
     io.to(roomId).emit("game_update", game);
   });
 
+  /* ---------- SELECT CELLS ---------- */
   socket.on("selected_cells", ({ roomId, selectedCells }) => {
-    const game = rooms[roomId];
-    if (!game) return;
-
-    // broadcast selected cells to other player
-    socket
-      .to(roomId)
-      .emit("selected_cells_update", { selectedCells, playerId: socket.id });
+    socket.to(roomId).emit("selected_cells_update", {
+      selectedCells,
+      playerId: socket.id,
+    });
   });
 
-  // SPELL CHECK
+  /* ---------- SPELL CHECK ---------- */
   socket.on("spell_check", ({ roomId, word, playerId, status }) => {
     const game = rooms[roomId];
     if (!game) return;
 
     const score = status ? word.length : 0;
 
-    // init history if not exists
-    if (!scores_detial_list[roomId]) {
-      scores_detial_list[roomId] = [];
-    }
+    scores_detial_list[roomId] ||= [];
 
-    // update total score
-    game.scores[playerId] = (game.scores[playerId] || 0) + score;
+    game.scores[playerId] += score;
 
     const score_details = {
       word,
@@ -231,47 +222,43 @@ io.on("connection", (socket) => {
       time: new Date().toISOString(),
     };
 
-    // ✅ store move
     scores_detial_list[roomId].push(score_details);
 
-    // 🧮 BUILD TOTAL SCORE MAP
-    const totalScores = {};
-    game.players.forEach((pid) => {
-      totalScores[pid] = game.scores[pid] || 0;
-    });
-
-    // console.log("Moves:", scores_detial_list[roomId]);
-    // console.log("Totals:", totalScores);
-
-    // 📡 SEND EVERYTHING TO CLIENTS
     io.to(roomId).emit("score_update", {
       moves: scores_detial_list[roomId],
-      totals: totalScores,
+      totals: game.scores,
       lastMove: score_details,
     });
   });
 
-  // DISCONNECT
-  socket.on("disconnect", () => {
-    delete players[socket.id];
-    io.emit("online_players", Object.values(players));
-    // console.log("Player Disconnected:", socket.id);
-  });
-
+  /* ---------- REACTION ---------- */
   socket.on("send_reaction", ({ roomId, emoji }) => {
-    if (!roomId || !emoji) return;
-
     io.to(roomId).emit("reaction", {
-      id: Date.now() + socket.id, // unique id
+      id: `${Date.now()}_${socket.id}`,
       emoji,
       from: socket.id,
       time: Date.now(),
     });
   });
+
+  /* ---------- DISCONNECT ---------- */
+  socket.on("disconnect", () => {
+    const player = players[socket.id];
+    if (player?.currentRoom) {
+      socket.to(player.currentRoom).emit("player_left", player);
+      delete rooms[player.currentRoom];
+      delete scores_detial_list[player.currentRoom];
+    }
+
+    delete players[socket.id];
+    io.emit("online_players", Object.values(players));
+  });
 });
 
-
-const PORT = process.env.PORT || 5000; // Use Render's port or default to 5000
+/* ===============================
+   SERVER START
+================================ */
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
