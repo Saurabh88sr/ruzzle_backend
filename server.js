@@ -30,7 +30,7 @@ const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
       const allowedOrigins = [
-        "http://localhost:5173",
+        "*",
       ];
 
       // polling requests me origin null hota hai
