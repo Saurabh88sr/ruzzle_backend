@@ -5,17 +5,12 @@ const cors = require("cors");
 
 const app = express();
 
-/* ===============================
-   EXPRESS CORS (REST APIs)
-================================ */
 app.use(
   cors({
     origin: "https://ruzzle-board-game.vercel.app",
     credentials: true,
   })
 );
-
-
 
 app.get("/", (req, res) => {
   res.send("Ruzzle Backend is running");
@@ -24,29 +19,16 @@ app.get("/", (req, res) => {
 const server = http.createServer(app);
 
 /* ===============================
-   SOCKET.IO CORS (CRITICAL FIX)
+   SOCKET.IO CORS (IMPORTANT)
 ================================ */
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      const allowedOrigins = [
-        "https://ruzzle-board-game.vercel.app",
-      ];
-
-      // polling requests me origin null hota hai
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS not allowed: " + origin));
-      }
-    },
+    origin: "https://ruzzle-board-game.vercel.app",
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["polling", "websocket"],
+  transports: ["polling", "websocket"], // keep polling first
 });
-
-
 
 /* ===============================
    GAME STATE
