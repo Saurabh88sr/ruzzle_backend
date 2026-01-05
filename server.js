@@ -10,7 +10,7 @@ const app = express();
 ================================ */
 app.use(
   cors({
-    origin: "*",
+    origin: "https://ruzzle-board-game.vercel.app",
     credentials: true,
   })
 );
@@ -30,7 +30,7 @@ const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
       const allowedOrigins = [
-        "*",
+        "https://ruzzle-board-game.vercel.app",
       ];
 
       // polling requests me origin null hota hai
