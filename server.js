@@ -7,7 +7,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://ruzzle-board-game.vercel.app",
+    origin: ["https://ruzzle-board-game.vercel.app", "http://localhost:5173"],
     credentials: true,
   })
 );
@@ -18,17 +18,16 @@ app.get("/", (req, res) => {
 
 const server = http.createServer(app);
 
-/* ===============================
-   SOCKET.IO CORS (IMPORTANT)
-================================ */
+
 const io = new Server(server, {
   cors: {
-    origin: "https://ruzzle-board-game.vercel.app",
+    origin: ["https://ruzzle-board-game.vercel.app", "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true,
   },
   transports: ["polling", "websocket"], // keep polling first
 });
+
 
 /* ===============================
    GAME STATE
@@ -136,15 +135,21 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
 
     if (room) {
+      // Notify the other player
       socket.to(roomId).emit("player_left", {
         socketId: socket.id,
         name: player.name,
       });
 
+      // Remove all players from the room
       room.players.forEach((pid) => {
-        if (players[pid]) players[pid].currentRoom = null;
+        if (players[pid]) {
+          players[pid].currentRoom = null;
+          io.sockets.sockets.get(pid)?.leave(roomId);
+        }
       });
 
+      // Delete room and scores
       delete rooms[roomId];
       delete scores_detial_list[roomId];
     }
