@@ -10,12 +10,11 @@ const app = express();
 ================================ */
 app.use(
   cors({
-    origin: [
-  "http://localhost:5173/"
-    ],
- 
+    origin: "*",
+    credentials: true,
   })
 );
+
 
 
 app.get("/", (req, res) => {
@@ -31,21 +30,22 @@ const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
       const allowedOrigins = [
-       " http://localhost:5173"
+        "http://localhost:5173",
       ];
 
-      // allow requests with no origin (like mobile apps / polling)
+      // polling requests me origin null hota hai
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("CORS not allowed"));
+        callback(new Error("CORS not allowed: " + origin));
       }
     },
     methods: ["GET", "POST"],
-  
+    credentials: true,
   },
   transports: ["polling", "websocket"],
 });
+
 
 
 /* ===============================
